@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI Sentiment Analyzer</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<link rel="stylesheet" href="../static/style.css">
+</head>
+
+<body class="dark">
+<header>
+    <div class="toggle" onclick="toggleMode()">🌙</div>
+    <div class="hd-intro">
+        <h1>Movie Reviews Analyzer</h1>
+        <p>🤔 Thinking of what to watch next!</p>
+        <p>😒 Bored of reading the long reviews...</p>
+        <p>😊 Here it is! Decide in just one click using this movie review sentiment analyszer </p>
+    </div>
+</header>
+<main>
+    <figure>
+        <img class="img" src="../static/comedy-movie-review-video-templates.webp" alt="">
+    </figure>
+    <section>
+
+        <div class="card">
+        
+            <textarea id="text" placeholder="Type or speak..." autofocus></textarea>
+        
+            <button onclick="predict()">Analyze</button>
+            <button onclick="startVoice()">🎤 Speak</button>
+        
+            <div class="result" id="result"></div>
+        
+            <div class="bar">
+                <div class="fill" id="bar"></div>
+            </div>
+        
+            <canvas id="chart" height="120"></canvas>
+        
+            <!-- DROPDOWN HISTORY -->
+            <div class="history-container">
+                <div class="history-header" onclick="toggleHistory()">
+                    📜 View History ▼
+                </div>
+                <div class="history-content" id="historyBox"></div>
+            </div>
+        </div>
+    </section>
+</main>
+<footer>
+    <section>
+        <span>🤔</span>
+        <span>😊</span>
+        <span>😂</span>
+        <span>😉</span>
+    </section>
+</footer>
+
+<script>
+// 🌙 Dark Mode Toggle
+function toggleMode() {
+    document.body.classList.toggle("dark");
+    document.body.classList.toggle("light");
+    let el = document.querySelector(".img");
+    el.classList.toggle("img-light");
+}
+
+// 🎤 Voice Input
+function startVoice() {
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = "en-US";
+    recognition.start();
+
+    recognition.onresult = function(event) {
+        const text = event.results[0][0].transcript;
+        document.getElementById("text").value = text;
+        predict();
+    };
+
+    recognition.onerror = function() {
+        alert("Voice recognition failed");
+    };
+}
+
+// 📈 Chart
+let historyScores = [];
+
+const ctx = document.getElementById('chart').getContext('2d');
+const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'Sentiment Score',
+            data: [],
+            borderWidth: 2,
+            tension: 0.3
+        }]
+    }
+});
+
+function updateChart(score) {
+    historyScores.push(score);
+    chart.data.labels.push("Input " + historyScores.length);
+    chart.data.datasets[0].data.push(score);
+    chart.update();
+}
+
+// 📜 Toggle Dropdown
+function toggleHistory() {
+    const box = document.getElementById("historyBox");
+
+    if (box.style.maxHeight) {
+        box.style.maxHeight = null;
+    } else {
+        box.style.maxHeight = box.scrollHeight + "px";
+    }
+}
+
+// 💾 Load History
+async function loadHistory() {
+    const res = await fetch('/history');
+    const data = await res.json();
+
+    let html = "";
+
+    data.slice().reverse().forEach(item => {
+        html += `
+            <div class="history-item">
+                <b>${item.label}</b> (${(item.score*100).toFixed(1)}%)<br>
+                <small>${item.text}</small>
+            </div>
+        `;
+    });
+
+    document.getElementById("historyBox").innerHTML = html;
+}
+
+// ⚡ Prediction
+async function predict() {
+    const text = document.getElementById("text").value;
+
+    const res = await fetch("/predict", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({text: text})
+    });
+
+    const data = await res.json();
+
+    const result = document.getElementById("result");
+    const bar = document.getElementById("bar");
+
+    let emoji = "😐";
+    if (data.score > 0.7) emoji = "😍";
+    else if (data.score > 0.5) emoji = "😊";
+    else if (data.score > 0.3) emoji = "😕";
+    else emoji = "😡";
+
+    result.innerText = `${data.label} ${emoji} (${(data.score*100).toFixed(2)}%)`;
+
+    bar.style.width = (data.score * 100) + "%";
+    bar.style.background = data.score > 0.5 ? "#00ffae" : "#ff4d4d";
+
+    updateChart(data.score);
+    loadHistory();
+}
+</script>
+
+</body>
+</html>
